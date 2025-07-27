@@ -1,352 +1,706 @@
-import { useState, useRef, useEffect } from 'react';
-import { useRouter } from 'next/router';
-import Head from 'next/head';
-import { createClient } from '@supabase/supabase-js';
-import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import React, { useState, useRef } from "react";
+import { createClient } from "@supabase/supabase-js";
+import { useRouter } from "next/router";
+import { motion, AnimatePresence } from "framer-motion";
+import {
   Upload as UploadIcon,
   Tag as TagIcon,
   DollarSign as DollarSignIcon,
   MapPin as MapPinIcon,
   ChevronRight,
   Check,
-  Loader2 as LoaderIcon
-} from 'lucide-react';
+  Loader2 as LoaderIcon,
+} from "lucide-react";
 
 // Initialize Supabase client
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 if (!supabaseUrl || !supabaseKey) {
-  console.error('Supabase URL or Anon Key is missing. Check environment variables.');
+  console.error("Supabase URL or Anon Key is missing. Check environment variables.");
 }
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-export default function PostItem() {
-  const [form, setForm] = useState({
-    category: '',
-    name: '',
-    description: '',
-    price: '',
-    condition: 'Like New',
-    location: ''
+export default function ItemPosting() {
+  const [formData, setFormData] = useState({
+    itemName: "",
+    category: "",
+    condition: "",
+    conditionNotes: "",
+    price: "",
+    description: "",
+    tags: "",
+    hostel: "",
+    deliveryOption: "",
+    isDigital: false,
+    isFree: false,
   });
+  const [images, setImages] = useState([]);
+  const [errors, setErrors] = useState({});
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState(null);
+  const [submissionError, setSubmissionError] = useState(null);
   const fileInputRef = useRef(null);
   const router = useRouter();
 
-  const steps = [
-    { title: 'Details', icon: <TagIcon size={24} /> },
-    { title: 'Photos', icon: <UploadIcon size={24} /> },
-    { title: 'Pricing', icon: <DollarSignIcon size={24} /> },
-    { title: 'Location', icon: <MapPinIcon size={24} /> }
-  ];
+  const steps = ["Item Details", "Delivery & Location", "Additional Options"];
 
-  const categories = ['Books', 'Electronics', 'Furniture', 'Clothing', 'Other'];
-  const conditions = ['New', 'Like New', 'Good', 'Fair', 'Poor'];
-
-  // Validation for each step
-  const isStepValid = () => {
-    if (currentStep === 0) return form.category && form.name && form.description;
-    if (currentStep === 2) return form.price && form.condition;
-    if (currentStep === 3) return form.location;
-    return true;
+  const handleInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setFormData((prev) => ({
+      ...prev,
+      [name]: type === "checkbox" ? checked : value,
+    }));
+    const newErrors = {};
+    if (currentStep === 0) {
+      if (!formData.itemName && name !== "itemName") newErrors.itemName = "Item name is required";
+      if (!formData.category && name !== "category") newErrors.category = "Category is required";
+      if (!formData.condition && name !== "condition") newErrors.condition = "Condition is required";
+      if (!formData.price && !formData.isFree && name !== "price" && name !== "isFree") newErrors.price = "Price is required unless free";
+      if (!formData.description && name !== "description") newErrors.description = "Description is required";
+    } else if (currentStep === 1) {
+      if (!formData.deliveryOption && name !== "deliveryOption") newErrors.deliveryOption = "Delivery option is required";
+    }
+    setErrors(newErrors);
+    console.log("Current errors after input change:", newErrors);
   };
 
-  const handleNext = () => {
-    if (!isStepValid()) {
-      alert('Please fill in all required fields.');
+  const handleImageUpload = async (e) => {
+    const files = Array.from(e.target.files);
+    if (images.length + files.length > 5) {
+      setErrors((prev) => ({ ...prev, images: "Maximum 5 images allowed" }));
+      console.log("Errors after image upload:", { ...errors, images: "Maximum 5 images allowed" });
       return;
     }
-    if (currentStep < steps.length - 1) {
-      setCurrentStep(prev => prev + 1);
-    } else {
-      handleSubmit();
-    }
+    const imageUrls = files.map((file) => URL.createObjectURL(file));
+    setImages((prev) => [...prev, ...imageUrls]);
+    setErrors((prev) => ({ ...prev, images: "" }));
+    validateStep(currentStep);
+    console.log("Errors after image upload:", errors);
   };
 
-  const handleSubmit = async () => {
-    setIsSubmitting(true);
-    try {
-      console.log('Submitting form:', form);
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      router.push('/success');
-      setIsSubmitting(false);
-    } catch (err) {
-      console.error('Submission error:', err);
-      setError('Failed to submit. Please try again.');
-      setIsSubmitting(false);
-    }
+  const removeImage = (index) => {
+    setImages((prev) => prev.filter((_, i) => i !== index));
+    setErrors((prev) => ({ ...prev, images: "" }));
+    validateStep(currentStep);
   };
 
   const handleFileInputClick = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click();
     } else {
-      console.error('File input ref is not defined');
+      console.error("File input ref is not defined");
     }
   };
 
-  // Debug state changes
-  useEffect(() => {
-    console.log(`Current step: ${currentStep}, Form state:`, form);
-  }, [currentStep, form]);
+  const validateStep = (step) => {
+    const newErrors = {};
+    if (step === 0) {
+      if (!formData.itemName) newErrors.itemName = "Item name is required";
+      if (!formData.category) newErrors.category = "Category is required";
+      if (!formData.condition) newErrors.condition = "Condition is required";
+      if (!formData.price && !formData.isFree) newErrors.price = "Price is required unless free";
+      if (!formData.description) newErrors.description = "Description is required";
+    } else if (step === 1) {
+      if (!formData.deliveryOption) newErrors.deliveryOption = "Delivery option is required";
+    }
+    setErrors(newErrors);
+    console.log("Validation errors on Next click:", newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
-  // Error boundary fallback
-  if (error) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-4 font-inter">
-        <div className="bg-orange-50 rounded-2xl shadow-2xl p-8 text-center">
-          <h2 className="text-2xl font-bold text-red-600 mb-4">Something went wrong</h2>
-          <p className="text-gray-700">{error}</p>
-        </div>
-      </div>
-    );
-  }
+  const handleNextStep = () => {
+    if (validateStep(currentStep)) {
+      setCurrentStep((prev) => Math.min(prev + 1, steps.length - 1));
+    }
+  };
+
+  const handlePrevStep = () => {
+    setCurrentStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const uploadImagesToSupabase = async (files) => {
+    const uploadedUrls = [];
+    for (const file of files) {
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${file.type.split("/")[1]}`;
+      console.log("Uploading file:", fileName);
+      const { data, error } = await supabase.storage
+        .from("item")
+        .upload(`public/${fileName}`, file);
+      if (error) {
+        console.error("Image upload error:", error.message, error);
+        throw new Error(`Failed to upload image: ${error.message}`);
+      }
+      const { data: urlData } = supabase.storage
+        .from("item-images")
+        .getPublicUrl(`public/${fileName}`);
+      console.log("Uploaded image URL:", urlData.publicUrl);
+      uploadedUrls.push(urlData.publicUrl);
+    }
+    return uploadedUrls;
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!validateStep(currentStep)) return;
+
+    setIsSubmitting(true);
+    setSubmissionError(null);
+
+    try {
+      console.log("Starting image upload process...");
+      const imageFiles = await Promise.all(
+        images.map(async (url, index) => {
+          console.log(`Fetching blob for image ${index + 1}: ${url}`);
+          const response = await fetch(url);
+          if (!response.ok) throw new Error(`Failed to fetch image ${index + 1}`);
+          return response.blob();
+        })
+      );
+      console.log("Image blobs fetched:", imageFiles);
+      const imageUrls = await uploadImagesToSupabase(imageFiles);
+
+      console.log("Inserting listing into Supabase...");
+      const { data, error } = await supabase.from("listings").insert([
+        {
+          name: formData.itemName,
+          category: formData.category,
+          condition: formData.condition,
+          condition_notes: formData.conditionNotes,
+          price: formData.isFree ? 0 : parseFloat(formData.price),
+          description: formData.description,
+          tags: formData.tags ? formData.tags.split(",").map((tag) => tag.trim()) : [],
+          hostel: formData.hostel,
+          delivery_option: formData.deliveryOption,
+          is_digital: formData.isDigital,
+          is_free: formData.isFree,
+          images: imageUrls,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      if (error) {
+        console.error("Supabase insert error:", error.message, error);
+        throw new Error(`Failed to create listing: ${error.message}`);
+      }
+
+      console.log("Listing created successfully:", data);
+      router.push("/listings");
+    } catch (error) {
+      setSubmissionError(error.message || "An error occurred while submitting");
+      console.error("Submission error:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const stepVariants = {
+    hidden: { opacity: 0, x: 50 },
+    visible: { opacity: 1, x: 0, transition: { duration: 0.5 } },
+    exit: { opacity: 0, x: -50, transition: { duration: 0.5 } },
+  };
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4 sm:p-6 font-inter relative overflow-hidden">
-      <Head>
-        <title>List New Item | Campus Marketplace</title>
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-      </Head>
-
-      {/* Bubbles Animation */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        {[...Array(5)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute bottom-[-120px] rounded-full opacity-30"
-            style={{
-              left: `${20 + i * 15}%`,
-              width: `${40 + i * 20}px`,
-              height: `${40 + i * 20}px`,
-              background: i % 2 === 0 ? 'radial-gradient(circle, rgba(255, 127, 80, 0.4), rgba(255, 127, 80, 0))' : 'radial-gradient(circle, rgba(45, 212, 191, 0.4), rgba(45, 212, 191, 0))',
-              animation: `float ${10 + i * 1.5}s infinite ease-in-out ${i * 0.5}s`
-            }}
-          />
-        ))}
-        <style jsx global>{`
-          @keyframes float {
-            0% { transform: translateY(0) scale(1); opacity: 0.3; }
-            50% { opacity: 0.5; }
-            100% { transform: translateY(-120vh) scale(1.3); opacity: 0; }
-          }
-        `}</style>
-      </div>
-
-      <motion.div 
-        className="bg-white/90 backdrop-blur-md rounded-2xl shadow-md hover:shadow-lg w-full max-w-6xl overflow-hidden relative z-10"
-        initial={{ opacity: 0, y: 50 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-      >
-        <div className="p-4 sm:p-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-3">Create Your Listing</h1>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 border-b border-gray-200 pb-3">
-            {steps.map((step, i) => (
-              <motion.div 
-                key={i}
-                className="flex items-center gap-2"
-                initial={{ x: -30, opacity: 0 }}
-                animate={{ x: 0, opacity: 1 }}
-                transition={{ delay: i * 0.15, duration: 0.4, type: "spring", stiffness: 140 }}
-              >
-                <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center ${i <= currentStep ? "bg-teal-600 text-white" : "bg-gray-200 text-gray-500"}`}>
-                  {i < currentStep ? <Check size={18} /> : step.icon}
-                </div>
-                <span className={`text-base font-semibold ${i <= currentStep ? "text-gray-900" : "text-gray-500"}`}>
-                  {step.title}
-                </span>
-              </motion.div>
-            ))}
-          </div>
-
-          <div className={currentStep === 0 ? "h-[340px] sm:h-[400px] overflow-hidden flex flex-col" : "max-h-[460px] sm:max-h-[520px] overflow-hidden"}>
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={currentStep}
-                initial={{ opacity: 0, x: currentStep > 0 ? 50 : -50 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: currentStep > 0 ? -50 : 50 }}
-                transition={{ duration: 0.3, ease: "easeInOut", type: "spring", stiffness: 140 }}
-                className="space-y-2 mt-4 bg-orange-50 rounded-xl p-4 sm:p-5"
-              >
-                {currentStep === 0 && (
-                  <div className="space-y-2 flex-1">
-                    <div>
-                      <label className="block text-base sm:text-lg font-semibold text-gray-800">Category*</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                        {categories.map((cat) => (
-                          <motion.button
-                            key={cat}
-                            type="button"
-                            whileHover={{ scale: 1.05, backgroundColor: "#fef3c7" }}
-                            whileTap={{ scale: 0.95 }}
-                            className={`py-2.5 px-4 sm:px-5 rounded-lg border text-base sm:text-lg font-medium transition-colors ${form.category === cat ? "border-coral-500 bg-coral-50 text-coral-700 shadow-inner" : "border-gray-200 hover:border-coral-400"}`}
-                            onClick={() => setForm({ ...form, category: cat })}
-                          >
-                            {cat}
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-base sm:text-lg font-semibold text-gray-800">Item Name*</label>
-                      <motion.input
-                        type="text"
-                        className="w-full px-4 sm:px-5 py-2.5 sm:py-3 border border-gray-200 rounded-lg focus:ring-4 focus:ring-orange-200 focus:border-orange-400 text-gray-900 text-base sm:text-lg shadow-sm"
-                        placeholder="e.g. Calculus Textbook 3rd Edition"
-                        value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })}
-                        initial={{ x: -20, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        transition={{ duration: 0.3, delay: 0.1 }}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-base sm:text-lg font-semibold text-gray-800">Description*</label>
-                      <motion.textarea
-                        rows={3}
-                        className="w-full px-4 sm:px-5 py-2.5 sm:py-3 border border-gray-200 rounded-lg focus:ring-4 focus:ring-orange-200 focus:border-orange-400 text-gray-900 text-base sm:text-lg resize-none shadow-sm"
-                        placeholder="Describe your item..."
-                        value={form.description}
-                        onChange={(e) => setForm({ ...form, description: e.target.value })}
-                        initial={{ x: -20, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        transition={{ duration: 0.3, delay: 0.2 }}
-                      />
-                    </div>
-                  </div>
-                )}
-                {currentStep === 1 && (
-                  <div className="space-y-4">
-                    <div 
-                      className="border-2 border-dashed border-gray-200 rounded-xl p-6 sm:p-8 text-center cursor-pointer hover:border-coral-400 transition-colors bg-coral-50 shadow-inner"
-                      onClick={handleFileInputClick}
-                    >
-                      <UploadIcon className="mx-auto h-10 w-10 text-coral-600 mb-3" />
-                      <p className="text-base sm:text-lg font-semibold text-gray-800">Drag & drop photos here</p>
-                      <p className="text-base text-gray-500">or click to browse (max 5MB each)</p>
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        className="hidden"
-                        accept="image/*"
-                        multiple
-                        onChange={(e) => {
-                          if (e.target.files) {
-                            console.log('Selected files:', Array.from(e.target.files).map(file => file.name));
-                          }
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-                {currentStep === 2 && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-base sm:text-lg font-semibold text-gray-800">Price*</label>
-                      <div className="relative">
-                        <span className="absolute left-4 sm:left-5 top-1/2 -translate-y-1/2 text-gray-500">$</span>
-                        <motion.input
-                          type="number"
-                          className="w-full pl-10 sm:pl-12 pr-4 sm:pr-5 py-2.5 sm:py-3 border border-gray-200 rounded-lg focus:ring-4 focus:ring-orange-200 focus:border-orange-400 text-gray-900 text-base sm:text-lg shadow-sm"
-                          placeholder="0.00"
-                          value={form.price}
-                          onChange={(e) => setForm({ ...form, price: e.target.value })}
-                          min="0"
-                          step="0.01"
-                          initial={{ x: 20, opacity: 0 }}
-                          animate={{ x: 0, opacity: 1 }}
-                          transition={{ duration: 0.3, delay: 0.1 }}
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-base sm:text-lg font-semibold text-gray-800">Condition*</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-                        {conditions.map((cond) => (
-                          <motion.button
-                            key={cond}
-                            type="button"
-                            whileHover={{ scale: 1.05, backgroundColor: "#fef3c7" }}
-                            whileTap={{ scale: 0.95 }}
-                            className={`py-2.5 px-4 sm:px-5 rounded-lg border text-base sm:text-lg font-medium ${form.condition === cond ? "border-coral-500 bg-coral-50 text-coral-700 shadow-inner" : "border-gray-200 hover:border-coral-400"}`}
-                            onClick={() => setForm({ ...form, condition: cond })}
-                          >
-                            {cond}
-                          </motion.button>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {currentStep === 3 && (
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-base sm:text-lg font-semibold text-gray-800">Pickup Location*</label>
-                      <motion.input
-                        type="text"
-                        className="w-full px-4 sm:px-5 py-2.5 sm:py-3 border border-gray-200 rounded-lg focus:ring-4 focus:ring-orange-200 focus:border-orange-400 text-gray-900 text-base sm:text-lg shadow-sm"
-                        placeholder="e.g. Dorm 3A, Library, Campus Center"
-                        value={form.location}
-                        onChange={(e) => setForm({ ...form, location: e.target.value })}
-                        initial={{ x: 20, opacity: 0 }}
-                        animate={{ x: 0, opacity: 1 }}
-                        transition={{ duration: 0.3, delay: 0.1 }}
-                      />
-                    </div>
-                    <div className="p-3 sm:p-4 bg-coral-50 rounded-lg shadow-inner">
-                      <h3 className="text-base sm:text-lg font-semibold text-coral-800">Ready to publish!</h3>
-                      <p className="text-base sm:text-lg text-coral-700">Review your details before listing</p>
-                    </div>
-                  </div>
-                )}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          <div className="p-4 sm:p-6 border-t border-gray-200">
-            <div className="flex justify-between">
-              {currentStep > 0 ? (
-                <motion.button
-                  type="button"
-                  className="px-6 sm:px-7 py-3 sm:py-3.5 text-gray-800 font-semibold rounded-xl bg-gray-100 hover:bg-gray-200 transition-colors text-base sm:text-lg shadow-md"
-                  onClick={() => setCurrentStep(prev => prev - 1)}
-                  whileHover={{ x: -4, scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                >
-                  Back
-                </motion.button>
-              ) : (
-                <div />
-              )}
-              <motion.button
-                type="button"
-                className={`px-6 sm:px-7 py-3 sm:py-3.5 rounded-xl font-semibold flex items-center gap-2 bg-orange-400 text-white shadow-md transition-colors text-base sm:text-lg ${isSubmitting ? "opacity-75 cursor-not-allowed" : "hover:bg-orange-500"}`}
-                onClick={handleNext}
-                disabled={isSubmitting}
-                whileHover={{ scale: isSubmitting ? 1 : 1.05 }}
-                whileTap={{ scale: isSubmitting ? 1 : 0.95 }}
-              >
-                {isSubmitting ? (
-                  <>
-                    <LoaderIcon className="h-6 w-6 sm:h-7 sm:w-7 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  <>
-                    {currentStep === steps.length - 1 ? "Publish Listing" : "Continue"}
-                    <ChevronRight size={20} />
-                  </>
-                )}
-              </motion.button>
+    <div className="min-h-screen bg-white font-['Inter'] flex items-center justify-center p-4">
+      <div className="container mx-auto max-w-7xl grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Left Promotional Card */}
+        <motion.div
+          className="lg:col-span-1 bg-gray-50 rounded-2xl shadow-lg p-8 flex flex-col justify-between"
+          initial={{ opacity: 0, y: 50 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+        >
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4 tracking-tight">Student Marketplace</h2>
+            <p className="text-sm text-gray-600 mb-6 font-medium">
+              Sell your items to students with ease. Add vibrant photos and details to attract buyers quickly.
+            </p>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <Check className="w-6 h-6 text-blue-600" />
+                <span className="text-sm text-gray-700 font-medium">Trusted student community</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <DollarSignIcon className="w-6 h-6 text-blue-600" />
+                <span className="text-sm text-gray-700 font-medium">Flexible pricing options</span>
+              </div>
+              <div className="flex items-center gap-3">
+                <MapPinIcon className="w-6 h-6 text-blue-600" />
+                <span className="text-sm text-gray-700 font-medium">Local or digital delivery</span>
+              </div>
             </div>
           </div>
-        </div>
-      </motion.div>
+          <div className="mt-8">
+            <a
+              href="#"
+              className="text-blue-600 font-semibold hover:text-blue-700 transition-colors duration-200"
+            >
+              Discover more →
+            </a>
+          </div>
+        </motion.div>
+
+        {/* Right Form Card */}
+        <motion.div
+          className="lg:col-span-2 bg-white rounded-2xl shadow-lg p-8"
+          initial={{ opacity: 0, x: 50 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ duration: 0.8 }}
+        >
+          <form onSubmit={handleSubmit}>
+            <h1 className="text-3xl font-bold text-gray-900 mb-6 tracking-tight">Create Your Listing</h1>
+
+            {/* Step Navigation */}
+            <div className="flex justify-between mb-6">
+              {steps.map((step, index) => (
+                <div key={index} className="flex items-center">
+                  <div
+                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold ${
+                      index <= currentStep ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
+                    }`}
+                  >
+                    {index + 1}
+                  </div>
+                  <span
+                    className={`ml-2 text-sm font-medium ${
+                      index <= currentStep ? "text-gray-900" : "text-gray-500"
+                    }`}
+                  >
+                    {step}
+                  </span>
+                  {index < steps.length - 1 && (
+                    <ChevronRight className="w-5 h-5 text-gray-400 mx-2" />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Step Content */}
+            <AnimatePresence mode="wait">
+              {currentStep === 0 && (
+                <motion.div
+                  key="step1"
+                  variants={stepVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                >
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-3">
+                    <TagIcon className="w-6 h-6 text-blue-600" />
+                    Item Details
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="itemName"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Item Name <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        id="itemName"
+                        name="itemName"
+                        type="text"
+                        value={formData.itemName}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Scientific Calculator"
+                        className={`w-full px-4 py-3 rounded-xl border ${
+                          errors.itemName ? "border-red-500" : "border-gray-200"
+                        } focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
+                      />
+                      {errors.itemName && (
+                        <p className="text-xs text-red-500 mt-1">{errors.itemName}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="category"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Category <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="category"
+                        name="category"
+                        value={formData.category}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-3 rounded-xl border ${
+                          errors.category ? "border-red-500" : "border-gray-200"
+                        } focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSIyNCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjYgOSAxMiAxNSAxOCA5Ij48L3BvbHlsaW5lPjwvc3ZnPg==')] bg-no-repeat bg-[right_1rem_center] bg-[length:1.5rem]`}
+                      >
+                        <option value="">Select a category</option>
+                        {[
+                          "Books",
+                          "Electronics",
+                          "Hostel Essentials",
+                          "Clothing",
+                          "Sports / Hobbies",
+                          "Digital Files",
+                          "Services",
+                          "Rental Items",
+                          "Event Tickets",
+                          "Free Items",
+                          "Others",
+                        ].map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.category && (
+                        <p className="text-xs text-red-500 mt-1">{errors.category}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="condition"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Condition <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="condition"
+                        name="condition"
+                        value={formData.condition}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-3 rounded-xl border ${
+                          errors.condition ? "border-red-500" : "border-gray-200"
+                        } focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjYgOSAxMiAxNSAxOCA5Ij48L3BvbHlsaW5lPjwvc3ZnPg==')] bg-no-repeat bg-[right_1rem_center] bg-[length:1.5rem]`}
+                      >
+                        <option value="">Select condition</option>
+                        {["New", "Like New", "Used - Good", "Used - Acceptable"].map((condition) => (
+                          <option key={condition} value={condition}>
+                            {condition}
+                          </option>
+                        ))}
+                      </select>
+                      {errors.condition && (
+                        <p className="text-xs text-red-500 mt-1">{errors.condition}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="conditionNotes"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Condition Notes
+                      </label>
+                      <input
+                        id="conditionNotes"
+                        name="conditionNotes"
+                        type="text"
+                        value={formData.conditionNotes}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Minor scratches on screen"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="price"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Price (₹) <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <DollarSignIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-5 w-5" />
+                        <input
+                          id="price"
+                          name="price"
+                          type="number"
+                          value={formData.price}
+                          onChange={handleInputChange}
+                          placeholder="500"
+                          disabled={formData.isFree}
+                          className={`w-full pl-10 py-3 rounded-xl border ${
+                            errors.price ? "border-red-500" : "border-gray-200"
+                          } focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${
+                            formData.isFree ? "bg-gray-100 cursor-not-allowed" : ""
+                          }`}
+                        />
+                      </div>
+                      {errors.price && (
+                        <p className="text-xs text-red-500 mt-1">{errors.price}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="tags"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Tags
+                      </label>
+                      <div className="relative">
+                        <TagIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 h-5 w-5" />
+                        <input
+                          id="tags"
+                          name="tags"
+                          type="text"
+                          value={formData.tags}
+                          onChange={handleInputChange}
+                          placeholder="e.g., calculator, study, engineering"
+                          className="w-full pl-10 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">Separate tags with commas</p>
+                    </div>
+
+                    <div className="md:col-span-2 space-y-2">
+                      <label
+                        htmlFor="description"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Description <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        id="description"
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        placeholder="Describe your item in detail..."
+                        rows="4"
+                        className={`w-full px-4 py-3 rounded-xl border ${
+                          errors.description ? "border-red-500" : "border-gray-200"
+                        } focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200`}
+                      />
+                      {errors.description && (
+                        <p className="text-xs text-red-500 mt-1">{errors.description}</p>
+                      )}
+                    </div>
+
+                    <div className="md:col-span-2 space-y-2">
+                      <label
+                        htmlFor="images"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Images (Max 5)
+                      </label>
+                      <div
+                        className={`relative border-2 border-dashed rounded-xl p-8 text-center transition-all duration-200 bg-gray-50 hover:bg-gray-100 ${
+                          errors.images ? "border-red-500" : "border-gray-200"
+                        }`}
+                      >
+                        <input
+                          id="images"
+                          type="file"
+                          multiple
+                          accept="image/*"
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                          onChange={handleImageUpload}
+                          ref={fileInputRef}
+                        />
+                        <div className="space-y-3 text-center">
+                          <UploadIcon className="mx-auto h-12 w-12 text-gray-400" />
+                          <div className="flex items-center justify-center text-sm text-gray-600">
+                            <button
+                              type="button"
+                              onClick={handleFileInputClick}
+                              className="relative cursor-pointer rounded-md bg-white font-semibold text-blue-600 hover:text-blue-700 focus-within:outline-none"
+                            >
+                              Upload photos
+                            </button>
+                            <p className="pl-1">or drag and drop</p>
+                          </div>
+                          <p className="text-xs text-gray-500">PNG, JPG up to 5MB each</p>
+                        </div>
+                      </div>
+                      {errors.images && (
+                        <p className="text-xs text-red-500 mt-1">{errors.images}</p>
+                      )}
+                      {images.length > 0 && (
+                        <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
+                          {images.map((image, index) => (
+                            <div key={index} className="relative group">
+                              <img
+                                src={image}
+                                alt={`Preview ${index + 1}`}
+                                className="w-full h-24 object-cover rounded-lg group-hover:scale-105 transition-transform duration-200"
+                              />
+                              <button
+                                type="button"
+                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+                                onClick={() => removeImage(index)}
+                              >
+                                <svg
+                                  className="w-4 h-4"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth="2"
+                                    d="M6 18L18 6M6 6l12 12"
+                                  />
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {currentStep === 1 && (
+                <motion.div
+                  key="step2"
+                  variants={stepVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                >
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-3">
+                    <MapPinIcon className="w-6 h-6 text-blue-600" />
+                    Delivery & Location
+                  </h2>
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="deliveryOption"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Delivery Method <span className="text-red-500">*</span>
+                      </label>
+                      <select
+                        id="deliveryOption"
+                        name="deliveryOption"
+                        value={formData.deliveryOption}
+                        onChange={handleInputChange}
+                        className={`w-full px-4 py-3 rounded-xl border ${
+                          errors.deliveryOption ? "border-red-500" : "border-gray-200"
+                        } focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 appearance-none bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIyNCIgaGVpZ2h0PSI2NCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9ImN1cnJlbnRDb2xvciIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjYgOSAxMiAxNSAxOCA5Ij48L3BvbHlsaW5lPjwvc3ZnPg==')] bg-no-repeat bg-[right_1rem_center] bg-[length:1.5rem]`}
+                      >
+                        <option value="">Select delivery method</option>
+                        <option value="pickup">Campus Pickup</option>
+                        <option value="delivery">Hostel Delivery</option>
+                        <option value="digital">Digital Delivery (for digital items)</option>
+                      </select>
+                      {errors.deliveryOption && (
+                        <p className="text-xs text-red-500 mt-1">{errors.deliveryOption}</p>
+                      )}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label
+                        htmlFor="hostel"
+                        className="block text-sm font-semibold text-gray-700 uppercase tracking-wide"
+                      >
+                        Hostel Name
+                      </label>
+                      <input
+                        id="hostel"
+                        name="hostel"
+                        type="text"
+                        value={formData.hostel}
+                        onChange={handleInputChange}
+                        placeholder="e.g., Block A, Hostel 5"
+                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200"
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {currentStep === 2 && (
+                <motion.div
+                  key="step3"
+                  variants={stepVariants}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                >
+                  <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center gap-3">
+                    <Check className="w-6 h-6 text-blue-600" />
+                    Additional Options
+                  </h2>
+                  <div className="flex flex-wrap gap-8">
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          name="isDigital"
+                          checked={formData.isDigital}
+                          onChange={handleInputChange}
+                          className="sr-only peer"
+                        />
+                        <div className="w-12 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700">Digital Item</span>
+                    </label>
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          name="isFree"
+                          checked={formData.isFree}
+                          onChange={handleInputChange}
+                          className="sr-only peer"
+                        />
+                        <div className="w-12 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-6 peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </div>
+                      <span className="text-sm font-semibold text-gray-700">Free Giveaway</span>
+                    </label>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Navigation Buttons */}
+            <div className="flex justify-between mt-8">
+              {currentStep > 0 && (
+                <button
+                  type="button"
+                  onClick={handlePrevStep}
+                  className="px-6 py-3 bg-gray-200 text-gray-700 font-semibold rounded-xl hover:bg-gray-300 transition-all duration-200"
+                >
+                  Previous
+                </button>
+              )}
+              <div className="ml-auto flex gap-4">
+                {currentStep < steps.length - 1 ? (
+                  <button
+                    type="button"
+                    onClick={handleNextStep}
+                    className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-all duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                    disabled={Object.keys(errors).length > 0}
+                  >
+                    Next
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700 transition-all duration-200 disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center gap-2"
+                    disabled={isSubmitting || Object.keys(errors).length > 0 || images.length > 5}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <LoaderIcon className="w-5 h-5 animate-spin" />
+                        Submitting...
+                      </>
+                    ) : (
+                      <>
+                        <Check className="w-5 h-5" />
+                        Post Your Listing
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {submissionError && (
+              <p className="text-sm text-red-500 mt-4 text-center">{submissionError}</p>
+            )}
+          </form>
+        </motion.div>
+      </div>
     </div>
   );
 }
